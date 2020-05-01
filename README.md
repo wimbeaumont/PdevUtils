@@ -16,6 +16,9 @@ For the moment there are three executables ( as example)
 
 the scpitest is a simple program for the parser test.  It use the scpi-parser lib and a "application" lib ( scpitest/lib ) 
 
+The files scpiparser.cpp .h  have to move to the scpi-parser lib.  But that is not possible for now as these file contains a class whiel the scpi-parser lib is a c lib (not c++) 
+
+
 scpi_server   is a program that listen to a socket , interprete the SCPI commands and responds. 
 
 The server uses scpi-parser  and the application lib (scpitest/lib )  
