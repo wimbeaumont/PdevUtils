@@ -19,9 +19,7 @@ int main(int argc, char const *argv[]){
     struct sockaddr_in serv_addr;
     char buffer[255];
     //char *hello = "Hello from client";
-    char hello[1024];
-
-    const int NrCmd=6;
+    const int NrCmd=16;
     char line_buffer[NrCmd][256];
 
 
@@ -40,13 +38,21 @@ int main(int argc, char const *argv[]){
 
 			strcpy(line_buffer[lc++],"*IDN?");
 			strcpy(line_buffer[lc++],":MEAS:TEMP?:CH 1");
+			strcpy(line_buffer[lc++],":MEAS:TEMP0?");
+			strcpy(line_buffer[lc++],":MEAS:TEMP1?");
+			strcpy(line_buffer[lc++],":MEAS:TEMP2?");
+			strcpy(line_buffer[lc++],":MEAS:TEMP? CH1");
+			strcpy(line_buffer[lc++],":MEAS:TEMP? CH2");
+			strcpy(line_buffer[lc++],":MEAS:TEMP? 1");
+			strcpy(line_buffer[lc++],":MEAS:TEMP? 2");
 			strcpy(line_buffer[lc++],":MEAS:TEMP?");
 			strcpy(line_buffer[lc++],":ONZIN:TEMP?");
 			strcpy(line_buffer[lc++],":MEASURE:HUMI?");
 			strcpy(line_buffer[lc++],":MEASURE:LUMINOSITY?");
+			strcpy(line_buffer[lc++],"*STOP");
 	 int nrmsg=lc;
 	 if (nrmsg > NrCmd) {
-		 printf("more mesages defined than fits in array \n\r");
+		 printf("more messages defined than fits in array \n\r");
 	 	 nrmsg=NrCmd;
 	 }
  	 lc=0;

@@ -41,7 +41,8 @@ int main(int argc, char const *argv[]){
         exit(EXIT_FAILURE);
     }
     int lc=0;
-         while ( 1)  {
+    bool STAYLOOP = true;
+         while ( STAYLOOP)  {
             if (listen(server_fd, 3) < 0) {  perror("listen");   exit(EXIT_FAILURE);     }
 			if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0){
 				perror("accept");               exit(EXIT_FAILURE);
@@ -50,7 +51,6 @@ int main(int argc, char const *argv[]){
 			valread = read( new_socket , buffer, 1024);
 			buffer[valread]='\0';
 			printf("This is from the client : %s length %d  expect %d ",buffer,strlen(buffer),valread );
-			float hum, Temp;
 
 			// remove the new line    
 			//char * p = strchr(resp,'\n');	if ( p)  { *p = '\0' ;}
@@ -58,6 +58,7 @@ int main(int argc, char const *argv[]){
 					if (valread > 0) {
 								env_scpi_execute_command( buffer, valread);
 								strcpy(resp,	env_get_result());
+								if( strcmp( resp, "STOP done") == 0 ) STAYLOOP = false;
 								if(strlen(resp)== 0) { strcpy(resp, "wrong SCPI cmd");}
 					} else {
 						strcpy(resp, "message is zerro");
