@@ -12,7 +12,7 @@ int main() {
 	const int NrCmd=6;
 	char line_buffer[NrCmd][256];
 	unsigned char read_length;
-	bool stay = true;
+	//bool stay = true;
 	scpi_setup();
 	int lc=0;
 

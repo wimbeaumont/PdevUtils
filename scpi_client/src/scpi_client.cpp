@@ -50,6 +50,7 @@ int main(int argc, char const *argv[]){
 			strcpy(line_buffer[lc++],":MEASURE:HUMI?");
 			strcpy(line_buffer[lc++],":MEASURE:LUMINOSITY?");
 			strcpy(line_buffer[lc++],"*STOP");
+			strcpy(line_buffer[lc++],":MEASURE:TEMP? 2");
 	 int nrmsg=lc;
 	 if (nrmsg > NrCmd) {
 		 printf("more messages defined than fits in array \n\r");
@@ -68,11 +69,11 @@ int main(int argc, char const *argv[]){
              return -1;
          }
          send(sock , line_buffer[lc] , strlen(line_buffer[lc]) , 0 );
-         printf("sent msg nr %d  %s length %d \n",lc,line_buffer[lc],strlen(line_buffer[lc]) );
+         printf("sent msg nr %d  %s length %d ",lc,line_buffer[lc],(int)strlen(line_buffer[lc]) );
          buffer[0]='\0';
          valread = read( sock , buffer, 1024);
          buffer[valread]='\0';
-         printf("this is the response (length %d)  from the server : %s %d\n",valread,buffer, strlen(buffer) );
+         printf("got (length %d,%d): %s\n",(int) strlen(buffer),valread,buffer );
                  close(sock);
                  sleep(1);
           lc++;

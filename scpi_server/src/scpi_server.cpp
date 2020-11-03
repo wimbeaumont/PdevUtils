@@ -40,7 +40,7 @@ int main(int argc, char const *argv[]){
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
-    int lc=0;
+    //int lc=0;
     bool STAYLOOP = true;
          while ( STAYLOOP)  {
             if (listen(server_fd, 3) < 0) {  perror("listen");   exit(EXIT_FAILURE);     }
@@ -50,8 +50,7 @@ int main(int argc, char const *argv[]){
 
 			valread = read( new_socket , buffer, 1024);
 			buffer[valread]='\0';
-			printf("This is from the client : %s length %d  expect %d ",buffer,strlen(buffer),valread );
-
+			printf("This is from the client : %s length %d  expect %d ",buffer,(int)strlen(buffer),valread );
 			// remove the new line    
 			//char * p = strchr(resp,'\n');	if ( p)  { *p = '\0' ;}
 
