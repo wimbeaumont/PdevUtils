@@ -45,19 +45,21 @@ int main(int argc, char const *argv[]){
 			strcpy(line_buffer[lc++],":MEAS:TEMP? CH2");
 			strcpy(line_buffer[lc++],":MEAS:TEMP? 1");
 			strcpy(line_buffer[lc++],":MEAS:TEMP? 2");
+			strcpy(line_buffer[lc++],"*HWVer?");
 			strcpy(line_buffer[lc++],":MEAS:TEMP?");
 			strcpy(line_buffer[lc++],":ONZIN:TEMP?");
 			strcpy(line_buffer[lc++],":MEASURE:HUMI?");
 			strcpy(line_buffer[lc++],":MEASURE:LUMINOSITY?");
-			strcpy(line_buffer[lc++],"*STOP");
+			//strcpy(line_buffer[lc++],"*STOP");
 			strcpy(line_buffer[lc++],":MEASURE:TEMP? 2");
 	 int nrmsg=lc;
 	 if (nrmsg > NrCmd) {
 		 printf("more messages defined than fits in array \n\r");
 	 	 nrmsg=NrCmd;
 	 }
- 	 lc=0;
-
+	 int ttcnt=0;
+	 while (ttcnt < 50000) {
+	 lc=0;
          while(lc< nrmsg) {
                  if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)       {
              printf("\n Socket creation error \n");
@@ -69,16 +71,16 @@ int main(int argc, char const *argv[]){
              return -1;
          }
          send(sock , line_buffer[lc] , strlen(line_buffer[lc]) , 0 );
-         printf("sent msg nr %d  %s length %d ",lc,line_buffer[lc],(int)strlen(line_buffer[lc]) );
+         printf("sent msg nr %d/%d %s length %d ",lc,ttcnt++,line_buffer[lc],(int)strlen(line_buffer[lc]) );
          buffer[0]='\0';
          valread = read( sock , buffer, 1024);
          buffer[valread]='\0';
-         printf("got (length %d,%d): %s\n",(int) strlen(buffer),valread,buffer );
+         printf("got (length %d,%d):%s\n",(int) strlen(buffer),valread,buffer );
                  close(sock);
-                 sleep(1);
+                 usleep(50000);
           lc++;
 
     }
-
+}
   return 0;
 }
