@@ -24,6 +24,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+* 
+*  20210404  WB reduce the resonse buffer and check for overrun the respons buffer 
+*            in case of overrun a error message in response buffer but should be done via de error handler
+*            increase the buffer for float conversion
+*            also removed the newline response methods  but can be activated by define NEWLINERESP macro 
+*            but this is not tested . 
  */
 
 #include <string.h>
@@ -34,6 +40,9 @@ SOFTWARE.
 
 #include "scpiparser.h"
 
+#define MAXRESPLEN 255 
+// #define __NEWLINERESP__ 
+
 #ifdef __cplusplus
 
   extern "C" {
@@ -42,31 +51,51 @@ SOFTWARE.
 
 
   class CmdStr {
-  	char stringbuffer[2500];
-
+  	char stringbuffer[MAXRESPLEN];
+	char* strcatmax(char *dest ,const char*  src ){
+		int dlen= strlen(dest);
+		int slen = strlen( src) ;
+		if ( dlen + slen  < MAXRESPLEN ){ 
+			strcat(dest,src);
+		} else 	{
+			clr();
+			// this is not how to do it but not clear how to do it. 
+			strcat(dest, "MAXRESPLEN reached") ;
+		}
+		return dest;
+	}	
+		
   	public :
   		CmdStr (void ){};
   		void print (const char* s){
-  			strcat(stringbuffer,s);
+  			strcatmax(stringbuffer,s);
   		}
-  		void println (const char* s, int length=4){
-  		  			strcat(stringbuffer,s);
-  		  			strcat(stringbuffer,"\n");
-  		  		}
+  		
   		void print( int i){
-  					char snum[6];
-  					sprintf( snum, "%d",i);
-  					strcat(stringbuffer,snum);
-  				}
+  					char snum[8];
+  					sprintf( snum, "%6d",i);
+  					snum[7]='\0';
+  					strcatmax(stringbuffer,snum);
+  		}
+  		
   		void print( float  i){
-  		  					char snum[6];
+  		  					char snum[14];
   		  					sprintf( snum, "%f",i);
-  		  					strcat(stringbuffer,snum);
-  		  				}
+  		  					snum[13]='\0';
+  		  					strcatmax(stringbuffer,snum);
+		}
+		
+#ifdef __NEWLINERESP__   		
+  		void println (const char* s, int length=4){
+  		  			strcatmax(stringbuffer,s);
+  		  			strcatmax(stringbuffer,"\n");
+  		}
+  		
   		void println (float f, int length=4){
   			print(f);
-  			strcat(stringbuffer,"\n");
+  			strcatmax(stringbuffer,"\n");
   		}
+#endif 
 
   		void write( const uint8_t* err, int length ){}
   		char * get_parse_result (void ) { return stringbuffer; }
@@ -90,7 +119,7 @@ system_error(struct scpi_parser_context* ctx, struct scpi_token* command)
 	Serial.print(error_s->id);
         Serial.print(",\"");
         Serial.write((const uint8_t*)error_s->description, error_s->length);
-	Serial.println("\"");
+	Serial.print("\"\n\r");
 
 	scpi_free_tokens(command);
 	return SCPI_SUCCESS;

@@ -17,9 +17,9 @@
 int main(int argc, char const *argv[]){
     int sock = 0, valread;
     struct sockaddr_in serv_addr;
-    char buffer[255];
+    char buffer[256];
     //char *hello = "Hello from client";
-    const int NrCmd=16;
+    const int NrCmd=18;
     char line_buffer[NrCmd][256];
 
 
@@ -51,6 +51,7 @@ int main(int argc, char const *argv[]){
 			strcpy(line_buffer[lc++],":MEASURE:HUMI?");
 			strcpy(line_buffer[lc++],":MEASURE:LUMINOSITY?");
 			//strcpy(line_buffer[lc++],"*STOP");
+			strcpy(line_buffer[lc++],":MEASURE:VOLT?");
 			strcpy(line_buffer[lc++],":MEASURE:TEMP? 2");
 	 int nrmsg=lc;
 	 if (nrmsg > NrCmd) {
