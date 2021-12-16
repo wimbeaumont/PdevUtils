@@ -9,10 +9,11 @@
  *  Version history :
  *  0.1   copied from scpiclient 
  *  1.2   added close ,  corrected message  '/0' pos
- 
+ *  1.3   adapted for WD version , but no essential changes 
+ *  1.4   added option for serial port 
  */ 
 
-#define SCPICLIENSERVER "1.3"
+#define SCPICLIENSERVER "1.4"
 
 
 #include <cstdio>
@@ -24,8 +25,12 @@
 #include <string.h> 
 
 
-int serialportsetup() {
-#define SERPORT "/dev/ttyACM1"	
+int serialportsetup(char prtnr ) {
+
+char  SERPORT[]="/dev/ttyACM0"	;
+if( (int)prtnr-0x30  <  0 || (int)prtnr-0x30 > 9 ) prtnr='0';
+SERPORT[11]=prtnr;
+printf("will use %s \n\r",SERPORT);
 int fd=open(SERPORT,O_RDWR | O_NOCTTY); //fd is locally defined but the open is static so also have to be closed
 
 	if(fd ==-1)
@@ -58,13 +63,15 @@ int fd=open(SERPORT,O_RDWR | O_NOCTTY); //fd is locally defined but the open is 
 //============================================================================
 
 int main(int argc, char const *argv[]){
+	char  prtnr='0';
 	int valread; 
     char buffer[256];
     const int NrCmd=20;
     char line_buffer[NrCmd][256];
-
+	if( argc >1) prtnr= argv[1][0];
+	printf(" portnr %c\n\r",prtnr);
 //serial port 
-	int fd  = serialportsetup();
+	int fd  = serialportsetup(prtnr);
 	if ( fd == -1 ) exit(-1); 
 
 /*  break gives broken pipe and them MBED is stuck 
@@ -125,7 +132,7 @@ int main(int argc, char const *argv[]){
 				buffer[valread]='\0';
 				int nrwr=write(fd,buffer,valread);	
 				buffer[valread-2]='\0';//suppress the newline in the output 
-				printf("msg nr %03d/%04d len %02d=%02d %-20s ",lc,ttcnt,valread,nrwr,buffer);
+				//printf("msg nr %03d/%04d len %02d=%02d %-20s ",lc,ttcnt,valread,nrwr,buffer);
 				valread=read(fd, buffer , sizeof(buffer));//get full return message 
 				if( valread == 0) {
 					strcpy(buffer,"resp message is zerro");
@@ -133,9 +140,12 @@ int main(int argc, char const *argv[]){
 					buffer[valread-1]='\0';	// messages is not terminated with \0 !!! overwrite newline
 				}
 				buffer[(int)strlen(buffer)-1]='\0';  //supress the  \r 
-				printf(" resp nr %d %-*s len %03d %03d \r\n",ttcnt++,18,buffer,valread, (int)strlen(buffer));				
+				//printf(" resp nr %d %-*s len %03d %03d \r\n",ttcnt++,18,buffer,valread, (int)strlen(buffer));				
+				printf(" resp nr %d %-*s",ttcnt++,18,buffer);
+				//printf(" len %03d %03d",valread, (int)strlen(buffer));
+				printf("\n\r");
 				buffer[0]='\0';
-				usleep(10000);
+				usleep(5000);
                 lc++;
 			}
 
