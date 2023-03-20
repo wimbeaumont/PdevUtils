@@ -12,11 +12,11 @@
  
  */ 
 
-#define SCPICLIENSERVER "1.3"
+#define SCPICLIENSERVER "1.4"
 
 
 #include <cstdio>
-#include <errno.h>  
+//#include <errno.h>  
 #include <fcntl.h>  // File Control Definitions for serial         
 #include <termios.h>// POSIX Terminal Control Definitions for serial 
 #include <cstdlib>     // atof 
@@ -24,14 +24,17 @@
 #include <string.h> 
 
 
-int serialportsetup() {
-#define SERPORT "/dev/ttyACM1"	
-int fd=open(SERPORT,O_RDWR | O_NOCTTY); //fd is locally defined but the open is static so also have to be closed
+int serialportsetup(char *portname) {
+char SERPORTDEFAULT[]= "/dev/ttyACM0";	
+
+if (! portname ) portname = SERPORTDEFAULT;
+printf("\n  try to open %s\n",portname);
+int fd=open(portname,O_RDWR | O_NOCTTY); //fd is locally defined but the open is static so also have to be closed
 
 	if(fd ==-1)
-     printf("\n  Error! in Opening %s\n",SERPORT);
+     printf("\n  Error! in Opening %s\n",portname);
 	else{ 
-		printf("\n  %s Opened Successfully\n",SERPORT);
+		printf("\n  %s Opened Successfully\n",portname);
 		
 		struct termios SerialPortSettings;
 		tcgetattr(fd, &SerialPortSettings);//get current settings 
@@ -62,31 +65,14 @@ int main(int argc, char const *argv[]){
     char buffer[256];
     const int NrCmd=20;
     char line_buffer[NrCmd][256];
-
-//serial port 
-	int fd  = serialportsetup();
-	if ( fd == -1 ) exit(-1); 
-
-/*  break gives broken pipe and them MBED is stuck 
-// send break 
-	if ( tcsendbreak( fd,0)) {
-		printf( " break fails %s \n", strerror(errno)); 
-	} else {
-		printf("break sent \n");
+    char* portname=0;
+    if ( argc==2) {
+		portname=(char*)argv[1];
 	}
-	
- sleep(5);
-*/
-	
-// flush port 
-	if ( tcflush(fd, TCIOFLUSH)) {
-		printf( " flush fails %s \n", strerror(errno)); 
-	} else {
-		printf("flush done  \n");
-	}
-
-
 	printf("%s ver %s\n\r",argv[0], SCPICLIENSERVER );
+//serial port 
+	int fd  = serialportsetup(portname);
+	if ( fd == -1 ) exit(-1); 
 	int lc=0;
 
 			strcpy(line_buffer[lc++],"*IDN?");
@@ -111,9 +97,9 @@ int main(int argc, char const *argv[]){
 		 printf("more messages defined than fits in array \n\r");
 	 	 nrmsg=NrCmd;
 	 }
-	 int ttcnt=1;
+	 int ttcnt=0;
 	 printf("init messages done \n\r");
-	 while (ttcnt ) { // < 50000) {
+	 while (ttcnt < 50000) {
 		lc=0;
 			while(lc< nrmsg) {
 				
@@ -125,15 +111,14 @@ int main(int argc, char const *argv[]){
 				buffer[valread]='\0';
 				int nrwr=write(fd,buffer,valread);	
 				buffer[valread-2]='\0';//suppress the newline in the output 
-				printf("msg nr %03d/%04d len %02d=%02d %-20s ",lc,ttcnt,valread,nrwr,buffer);
+				printf("msg nr %02d/%04d len %02d=%02d %-20s  ",lc,ttcnt++,valread,nrwr,buffer);
 				valread=read(fd, buffer , sizeof(buffer));//get full return message 
 				if( valread == 0) {
 					strcpy(buffer,"resp message is zerro");
 				} else { 		
 					buffer[valread-1]='\0';	// messages is not terminated with \0 !!! overwrite newline
 				}
-				buffer[(int)strlen(buffer)-1]='\0';  //supress the  \r 
-				printf(" resp nr %d %-*s len %03d %03d \r\n",ttcnt++,18,buffer,valread, (int)strlen(buffer));				
+				printf(" resp %-*s len %02d \r\n",18,buffer, (int)strlen(buffer));				
 				buffer[0]='\0';
 				usleep(10000);
                 lc++;
