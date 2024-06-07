@@ -1,6 +1,5 @@
 #ignore all in this directory 
 .*
-scpi_client/src/scpi_client_serBI.cpp
 #but not the cmake file and .gitignore itself
 !.gitignore
 !.git
