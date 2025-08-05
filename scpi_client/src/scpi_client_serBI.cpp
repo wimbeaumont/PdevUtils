@@ -13,10 +13,12 @@
  *  1.3  forked from scpiclient_serB 
  *       added time , for communication ask only the necessary parameters 
  *  1.4  changes,  comments more as stand alone program , time print format corretions 
+ *  1.5  added string stream and storage of log file 
+ *  1.6  moved wait time from between measurements to between all measurements
  
  */ 
 
-#define SCPICLIENSERBI "1.4"
+#define SCPICLIENTSERBI "1.6"
 
 
 #include <cstdio>
@@ -27,19 +29,24 @@
 #include <unistd.h> 		// for sockets , serial 
 #include <string.h> 
 #include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <sstream> 
+#include <boost/program_options.hpp>
+// Namespaces
+using namespace std;
+namespace po = boost::program_options;
 
+int serialportsetup(string portname) {
 
-int serialportsetup(char *portname) {
-char SERPORTDEFAULT[]= "/dev/ttyACM1";	
-
-if (! portname ) portname = SERPORTDEFAULT;
-printf("\n  try to open %s\n",portname);
-int fd=open(portname,O_RDWR | O_NOCTTY); //fd is locally defined but the open is static so also have to be closed
+printf("\n  try to open %s\n",portname.c_str());
+int fd=open(portname.c_str(),O_RDWR | O_NOCTTY); //fd is locally defined but the open is static so also have to be closed
 
 	if(fd ==-1)
-     printf("\n  Error! in Opening %s\n",portname);
+     printf("\n  Error! in Opening %s\n",portname.c_str());
 	else{ 
-		printf("\n  %s Opened Successfully\n",portname);
+		printf("\n  %s Opened Successfully\n",portname.c_str());
 		
 		struct termios SerialPortSettings;
 		tcgetattr(fd, &SerialPortSettings);//get current settings 
@@ -63,6 +70,48 @@ int fd=open(portname,O_RDWR | O_NOCTTY); //fd is locally defined but the open is
     return fd ;
 }
 
+
+/*!
+************************************************
+* Argument parser.
+************************************************
+*/
+po::variables_map process_program_options(const int argc, const char* const argv[])
+{
+    po::options_description desc("Allowed options");
+
+    desc.add_options()("help,h", "produce this help message")
+                      ("serialport,s",po::value<string>()->default_value("/dev/ttyACM1"),"set serial port to connect to")
+                      ("waittime,w", po::value<int>()->implicit_value(120), "time to wait between two measurements [s]");
+
+    po::variables_map vm;
+    try
+    {
+        po::store(po::parse_command_line(argc, argv, desc), vm);
+    }
+    catch(po::error const& e)
+    {
+        std::cerr << e.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
+    po::notify(vm);
+
+    // Help
+    if(vm.count("help"))
+    {
+        cout << desc << "\n";
+        exit(EXIT_SUCCESS);
+    }
+
+    return vm;
+}
+
+
+
+
+
+
+
 //============================================================================
 
 int main(int argc, char const *argv[]){
@@ -70,14 +119,21 @@ int main(int argc, char const *argv[]){
     char buffer[256];
     const int NrCmd=20;
     char line_buffer[NrCmd][256];
-    char* portname=0;
-    if ( argc==2) {
-		portname=(char*)argv[1];
-	}
-	printf("%s ver %s\n\r",argv[0], SCPICLIENSERBI );
-//serial port 
+    
+    
+    po::variables_map v_map = process_program_options(argc, argv);
+    std::string        portname  = v_map["serialport"].as<string>();
+    int waittime =  v_map["waittime"].as<int>();
+    if (waittime < 5 )  waittime=10;
+	printf("%s ver %s\n\r",argv[0], SCPICLIENTSERBI );
+    //serial port 
 	int fd  = serialportsetup(portname);
-	if ( fd == -1 ) exit(-1); 
+	if ( fd == -1 ) exit(-1);
+	
+    std::ofstream outfile; 
+    outfile.open("/data/logs/mbed.log", std::ios_base::app);
+	if ( outfile.fail()) exit(-3);
+ 
 
 /*  break gives broken pipe and them MBED is stuck 
 // send break 
@@ -97,8 +153,6 @@ int main(int argc, char const *argv[]){
 		printf("flush done  \n");
 	}
 
-
-	printf("%s ver %s\n\r",argv[0], SCPICLIENSERBI);
 	int lc=0;
 
 			strcpy(line_buffer[lc++],":MEAS:TEMP0?");
@@ -114,9 +168,12 @@ int main(int argc, char const *argv[]){
 	 int ttcnt=1;
 	 printf("init messages done \n\r");
 	 while (ttcnt ) { // < 50000) {
+		std::stringstream ss;
+		 
 		lc=0;
 		time_t now = time(0); tm *ltm = localtime(&now);
-		printf("%4d%02d%02d %02d:%02d ",1900+ltm->tm_year,1+ltm->tm_mon,ltm->tm_mday,ltm->tm_hour,ltm->tm_min); 	
+		ss << std::setfill('0') << std::setw(4) << 1900+ltm->tm_year;
+		ss <<std::setw(2) <<1+ltm->tm_mon<<std::setw(2) <<ltm->tm_mday<<"  "<<std::setw(2) <<ltm->tm_hour<<":"<<std::setw(2) <<ltm->tm_min<<" ";
 		while(lc< nrmsg) {
 				tcflush(fd, TCIOFLUSH);
 				strcpy(buffer,line_buffer[lc] );
@@ -136,12 +193,19 @@ int main(int argc, char const *argv[]){
 				}
 				buffer[(int)strlen(buffer)-1]='\0';  //supress the  \r 
 				//printf(" resp nr %d %-*s len %03d %03d \r\n",ttcnt++,18,buffer,valread, (int)strlen(buffer));
-				printf("%-*s  ",12,buffer);				
+				ss << buffer <<" " ;
+				
+				//printf("%-*s  ",12,buffer);				
 				buffer[0]='\0';
-				usleep(6000000);
+				//usleep(waittime * 10000);
+				usleep(1000000);
                 lc++;
 			}
-			printf("\r\n");
+			ss <<endl;
+			outfile <<ss.str();
+			outfile.flush();
+			cout << ss.str();
+			sleep(waittime);
     }
   close (fd) ;
   return 0;

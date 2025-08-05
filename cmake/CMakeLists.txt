@@ -62,7 +62,7 @@ foreach ( testprog ${ALLPROGS})
 	#target_compile_options(${testname}  PUBLIC -std=c++1y -Wall )
 	target_compile_options(${testname}  PUBLIC -g -Wall )
 	target_include_directories(${testname} PUBLIC  ${incl_dirs}  )
-	target_link_libraries( ${testname} scpiparser applib)
+	target_link_libraries( ${testname} scpiparser applib  boost_program_options)
 endforeach ( testprog ${allprogs}) 
 ###############################################################################
 ## testing ####################################################################
