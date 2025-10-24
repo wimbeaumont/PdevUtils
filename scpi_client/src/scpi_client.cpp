@@ -4,7 +4,11 @@
 // Version     :
 // Copyright   : Willem Beaumont University Antwerpen
 // Description : program to test a SCPI server based on sockets
+// V1.0 : initial version 
+// V1.1 : corrected size error for reading  added version
 //============================================================================
+
+#define SCPICLIENT "1.1"
 
 // Client side C/C++ program to demonstrate Socket programming
 #include <stdio.h>
@@ -74,7 +78,7 @@ int main(int argc, char const *argv[]){
          send(sock , line_buffer[lc] , strlen(line_buffer[lc]) , 0 );
          printf("sent msg nr %d/%d %s length %d ",lc,ttcnt++,line_buffer[lc],(int)strlen(line_buffer[lc]) );
          buffer[0]='\0';
-         valread = read( sock , buffer, 1024);
+         valread = read( sock , buffer, sizeof(buffer));
          buffer[valread]='\0';
          printf("got (length %d,%d):%s\n",(int) strlen(buffer),valread,buffer );
                  close(sock);
