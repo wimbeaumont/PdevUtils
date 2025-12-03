@@ -109,7 +109,7 @@ po::variables_map process_program_options(const int argc, const char* const argv
 }
 
 
-void  get_info (int fd, const char* request , char* buffer, int buffersize ) {
+int get_info (int fd, const char* request , char* buffer, int buffersize ) {
 	int valread; 
 	tcflush(fd, TCIOFLUSH);
 	strcpy(buffer,request );
@@ -129,28 +129,45 @@ void  get_info (int fd, const char* request , char* buffer, int buffersize ) {
 	}
 	buffer[(int)strlen(buffer)-1]='\0';  //supress the  \r 
 	//printf("Buf: %-*s  ",12,buffer);				
-	//printf("Buf: %s  \n\r",buffer);				
+	//printf("Buf: %s  \n\r",buffer);
+	return valread;				
 }
 
-int set_socket_bindings(int server_fd){
+int setup_socket(int timeoutset=1){
+	int server_fd; 
+	// Creating socket file descriptor
+	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) { 
+        perror("socket failed"); 
+        exit(EXIT_FAILURE); 
+    } 
     struct sockaddr_in address; 
     int addrlen = sizeof(address); 
-    int opt = 1;   
+    int opt = 1;
+	struct timeval timeout;
+	timeout.tv_sec = timeoutset; 
+	timeout.tv_usec = 0; //   
     // Forcefully attaching socket to the port
+	
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,&opt, sizeof(opt)))  { 
         perror("setsockopt"); 
+        exit(EXIT_FAILURE); 
+    } 
+	if (setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof timeout)){
+		perror("setsockopt2"); 
         exit(EXIT_FAILURE); 
     } 
     address.sin_family = AF_INET; 
     address.sin_addr.s_addr = htonl(INADDR_ANY); 
     address.sin_port = htons( PORT ); 
        
-    // Forcefully attaching socket to the port 8080 
+    // Forcefully attaching socket to the port 
     if (bind(server_fd, (struct sockaddr *)&address,sizeof(address))<0) { 
         perror("bind failed"); 
         exit(EXIT_FAILURE); 
     } 
+	
 	// make it non blocking
+	/*
 	int flags = fcntl(server_fd, F_GETFL, 0);
 	if (flags == -1) {
 		perror("fcntl F_GETFL");
@@ -160,30 +177,30 @@ int set_socket_bindings(int server_fd){
 		perror("fcntl F_SETFL");
 		exit(EXIT_FAILURE);
 	}
-	if(listen(server_fd, 3) <0 ) {
-		perror("socket listen failed ");
-		return -1;
-	}
+	*/
 	// socket setup done 	
-	return 0;
+	return server_fd;
 }
 
 
 int new_socket ;
 int  get_socket_message(int server_fd, char* buffer, int buffersize){
-	
+	if(listen(server_fd, 3) <0 ) {	perror("socket listen failed ");return -1;}
 	new_socket = accept(server_fd, NULL, NULL);
-	if( errno == EWOULDBLOCK || errno == EAGAIN) {
+	if( new_socket == -1 ) {
+		if( errno == EWOULDBLOCK || errno == EAGAIN) {
 		// no client connected 
-		return 0;
-	} else if ( new_socket <0) {
-		perror("socket accept failed ");
-		return -1;
+		return -3;
+		} else if ( new_socket <0) {
+			perror("socket accept failed ");
+			return -1;
+		}
 	}
 	
 	ssize_t  valread = read( new_socket, buffer, buffersize); 
 	if ( valread == 0 ) {
 		printf("Socket closed by client \n");
+		close(new_socket);
 		return -1;
 	} else if ( valread >= buffersize ) {
 		//message too long					
@@ -196,11 +213,14 @@ int  get_socket_message(int server_fd, char* buffer, int buffersize){
 
 int interprete_socket_message(int serial_fd , int server_fd, char* buffer, int buffersize){
 	int valread= get_socket_message(server_fd, buffer, buffersize);
-	if ( valread <=0) { printf( " get %d back from socketreturn", valread);return valread; }// no message or error
+	if ( valread <=0) { 
+		//printf( " get %d back from socketreturn", valread);
+		return valread; 
+	}// no message or error
 	printf( " there is a message\n");
-	if ( strncmp(buffer,"HvOn",4) ==0) {
+	if ( strncmp(buffer,"HVon",4) ==0) {
 		get_info(serial_fd,":SET:IO:CH 0 1", buffer, buffersize	);
-	} else if ( strncmp(buffer,"HvOff",5) ==0) {
+	} else if ( strncmp(buffer,"HVoff",5) ==0) {
 		get_info(serial_fd,":SET:IO:CH 0 0", buffer, buffersize	);	
 		buffer=strcpy(buffer,"OK\r\n");
 	}else { cout << "Unknown socket command : " << buffer << endl;
@@ -235,13 +255,8 @@ int main(int argc, char const *argv[]){
 	// setup the socket  simple socket for 1 client
     int server_fd; 
 
-   // Creating socket file descriptor 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) { 
-        perror("socket failed"); 
-        exit(EXIT_FAILURE); 
-    } 
-	set_socket_bindings(server_fd);
-	
+    // setup socket file descriptor  if fails program exits
+    server_fd=setup_socket(waittime);
     std::ofstream outfile;
      
     outfile.open(outputfilename, std::ios_base::app);
@@ -273,6 +288,8 @@ int main(int argc, char const *argv[]){
 			strcpy(line_buffer[lc++],":MEAS:TEMP1?");
 			strcpy(line_buffer[lc++],":MEAS:TEMP3?");
 			strcpy(line_buffer[lc++],":MEASURE:HUMI?");
+			strcpy(line_buffer[lc++],":MEASURE:HUMI?:CH 1");
+			strcpy(line_buffer[lc++],":MEASURE:DP?:CH 1");
 			strcpy(line_buffer[lc++],":MEASURE:LUMINOSITY?");
 			strcpy(line_buffer[lc++],":GET:STATUS?");
 			
@@ -299,6 +316,7 @@ int main(int argc, char const *argv[]){
 		time_t now = time(0); tm *ltm = localtime(&now);
 		ss << std::setfill('0') << std::setw(4) << 1900+ltm->tm_year;
 		ss <<std::setw(2) <<1+ltm->tm_mon<<std::setw(2) <<ltm->tm_mday<<"  "<<std::setw(2) <<ltm->tm_hour<<":"<<std::setw(2) <<ltm->tm_min<<" ";
+		//std::cout << ss.str()<<std::flush;
 		while(lc< nrmsg) {
 		/*		if (lc ==0) {
 					if ( toggle ==0) {
@@ -310,11 +328,10 @@ int main(int argc, char const *argv[]){
 					}
 				}
 				else {	*/
-				interprete_socket_message(fd, server_fd, buffer, sizeof(buffer));
-				get_info (fd, line_buffer[lc] , buffer,sizeof(buffer) ) ;
+				valread=get_info (fd, line_buffer[lc] , buffer,sizeof(buffer) ) ;
 				//printf(" resp nr %d %-*s len %03d %03d \r\n",ttcnt++,18,buffer,valread, (int)strlen(buffer));
 				ss << buffer <<" " ;
-				
+				//std::cout << ss.str()<<std::flush;
 				//printf("%-*s  ",12,buffer);				
 				buffer[0]='\0';
 				usleep(5* 10000); // fix value , see what is optimal 
@@ -325,7 +342,10 @@ int main(int argc, char const *argv[]){
 			outfile <<ss.str();
 			outfile.flush();
 			std::cout << ss.str();
-			int  slept=sleep(waittime);
+			// timeout after waittime seconds on socket
+			interprete_socket_message(fd, server_fd, buffer, sizeof(buffer));
+			
+			//int  slept=sleep(waittime);
 			//cout << "waittime of "<<waittime <<" slept " << slept <<"  ends" << endl;
     }
   close (fd) ;
