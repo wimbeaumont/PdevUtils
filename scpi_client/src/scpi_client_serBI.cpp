@@ -64,7 +64,7 @@ int fd=open(portname.c_str(),O_RDWR | O_NOCTTY); //fd is locally defined but the
 		tcsetattr(fd,TCSANOW,&SerialPortSettings); // write the settings to the hardware without waiting ( TCSANOW)
 		//SerialPortSettings.c_cc[VMIN]  = 0; // Read 10 characters   we wait for the newline 
 		SerialPortSettings.c_cc[VTIME] = 0;  // Wait indefinitely for the moment   
-		
+		//printf("\n  %s  port settings  Successfully\n",portname.c_str());
 		
 	}
     return fd ;
@@ -81,8 +81,9 @@ po::variables_map process_program_options(const int argc, const char* const argv
     po::options_description desc("Allowed options");
 
     desc.add_options()("help,h", "produce this help message")
-                      ("serialport,s",po::value<string>()->default_value("/dev/ttyACM1"),"set serial port to connect to")
-                      ("waittime,w", po::value<int>()->implicit_value(120), "time to wait between two measurements [s]");
+                      ("serialport,s",po::value<string>()->default_value("/dev/ttyACM0"),"set serial port to connect to")
+                      ("logfile,l",po::value<string>()->default_value("/data/logs/mbed.log"),"output file")
+                      ("waittime,w", po::value<int>()->default_value(120), "time to wait between two measurements [s]");
 
     po::variables_map vm;
     try
@@ -123,17 +124,24 @@ int main(int argc, char const *argv[]){
     
     po::variables_map v_map = process_program_options(argc, argv);
     std::string        portname  = v_map["serialport"].as<string>();
+    std::string        logfile  = v_map["logfile"].as<string>();
     int waittime =  v_map["waittime"].as<int>();
     if (waittime < 5 )  waittime=10;
 	printf("%s ver %s\n\r",argv[0], SCPICLIENTSERBI );
+	printf("log output file is %s , wait time is %d s \n\r" ,logfile.c_str(),waittime);
     //serial port 
 	int fd  = serialportsetup(portname);
-	if ( fd == -1 ) exit(-1);
+	if ( fd == -1 ) {
+		printf(" error in opening serial  port");
+		exit(-1);
+	}
 	
     std::ofstream outfile; 
-    outfile.open("/data/logs/mbed.log", std::ios_base::app);
-	if ( outfile.fail()) exit(-3);
- 
+    outfile.open(logfile, std::ios_base::app);
+	if ( outfile.fail()) {
+		printf(" can not open %s ",logfile.c_str());
+		exit(-3);
+	}
 
 /*  break gives broken pipe and them MBED is stuck 
 // send break 
