@@ -15,10 +15,15 @@
  *  1.4  changes,  comments more as stand alone program , time print format corretions 
  *  1.5  added string stream and storage of log file 
  *  1.6  moved wait time from between measurements to between all measurements
+ *  1.7  optimized for pico
+ *  1.8  added socket 
+ *  1.9  option to have output to the console during running 
+ *  2.0  moved sleep between the messages , added sleep for commands from the socket 
+ * 
  
  */ 
 
-#define SCPICLIENTSERBI "1.6"
+#define SCPICLIENTSERBI "2.0"
 
 
 #include <cstdio>
@@ -29,6 +34,9 @@
 #include <unistd.h> 		// for sockets , serial 
 #include <string.h> 
 #include <ctime>
+#include <sys/socket.h> // for sockets
+#include <netinet/in.h> // for sockets
+#include <fcntl.h>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -37,6 +45,8 @@
 // Namespaces
 using namespace std;
 namespace po = boost::program_options;
+#define HWFLAVOR "BiBox"
+#define PORT 9090 //port for socket communication
 
 int serialportsetup(string portname) {
 
@@ -76,42 +86,158 @@ int fd=open(portname.c_str(),O_RDWR | O_NOCTTY); //fd is locally defined but the
 * Argument parser.
 ************************************************
 */
-po::variables_map process_program_options(const int argc, const char* const argv[])
-{
+po::variables_map process_program_options(const int argc, const char* const argv[]){
     po::options_description desc("Allowed options");
-
     desc.add_options()("help,h", "produce this help message")
-                      ("serialport,s",po::value<string>()->default_value("/dev/ttyACM0"),"set serial port to connect to")
+                      ("serialport,s",po::value<string>()->default_value("/dev/ttyACM1"),"set serial port to connect to")
                       ("logfile,l",po::value<string>()->default_value("/data/logs/mbed.log"),"output file")
-                      ("waittime,w", po::value<int>()->default_value(120), "time to wait between two measurements [s]");
+                      ("waittime,w", po::value<int>()->default_value(120), "time to wait between two measurements [s]")
+					  ("console,c", po::value<bool>()->default_value(false), "if true result is also send to the console ");
 
     po::variables_map vm;
-    try
-    {
+    try {
         po::store(po::parse_command_line(argc, argv, desc), vm);
     }
-    catch(po::error const& e)
-    {
+    catch(po::error const& e)  {
         std::cerr << e.what() << '\n';
         exit(EXIT_FAILURE);
     }
     po::notify(vm);
-
     // Help
-    if(vm.count("help"))
-    {
+    if(vm.count("help"))   {
         cout << desc << "\n";
         exit(EXIT_SUCCESS);
     }
-
     return vm;
 }
 
 
+int get_info (int fd, const char* request , char* buffer, int buffersize ) {
+	int valread; 
+	tcflush(fd, TCIOFLUSH);
+	strcpy(buffer,request );
+	valread=(int)strlen(buffer);
+	buffer[valread++]='\r';buffer[valread++]='\n';buffer[valread]='\0';//endl added 
+	int nrwr=write(fd,buffer,valread);	
+	//buffer[valread-2]='\0';//suppress the newline in the output 
+	//printf("msg nr %03d/%04d len %02d=%02d %-20s ",lc,ttcnt,valread,nrwr,buffer);
+	//printf("%-20s ",buffer);
+	valread=read(fd, buffer , buffersize);//get full return message 	
+	//printf("valread at line %d : %d , buffersize %d \n\r",__LINE__, valread, buffersize);	
+	if( valread == 0) {
+		strcpy(buffer,"resp message is zerro");
+	} else { 		
+		buffer[valread]='\0';	// messages is not terminated with \0 !!! overwrite newline 
+		//20251025  now seems to be valread instead of valread -1 
+		
+	}
+	buffer[(int)strlen(buffer)-1]='\0';  //supress the  \r 
+	//printf("Buf: %-*s  ",12,buffer);				
+	//printf("Buf: %s  \n\r",buffer);
+	return valread;				
+}
+
+int setup_socket(int timeoutset=1){
+	int server_fd; 
+	// Creating socket file descriptor
+	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) { 
+        perror("socket failed"); 
+        exit(EXIT_FAILURE); 
+    } 
+    struct sockaddr_in address; 
+    int addrlen = sizeof(address); 
+    int opt = 1;
+	struct timeval timeout;
+	timeout.tv_sec = timeoutset; 
+	timeout.tv_usec = 0; //   
+    // Forcefully attaching socket to the port
+	
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,&opt, sizeof(opt)))  { 
+        perror("setsockopt"); 
+        exit(EXIT_FAILURE); 
+    } 
+	if (setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof timeout)){
+		perror("setsockopt2"); 
+        exit(EXIT_FAILURE); 
+    } 
+    address.sin_family = AF_INET; 
+    address.sin_addr.s_addr = htonl(INADDR_ANY); 
+    address.sin_port = htons( PORT ); 
+       
+    // Forcefully attaching socket to the port 
+    if (bind(server_fd, (struct sockaddr *)&address,sizeof(address))<0) { 
+        perror("bind failed"); 
+        exit(EXIT_FAILURE); 
+    } 
+	
+	// make it non blocking
+	/*
+	int flags = fcntl(server_fd, F_GETFL, 0);
+	if (flags == -1) {
+		perror("fcntl F_GETFL");
+		exit(EXIT_FAILURE);
+	}
+	if(fcntl(server_fd, F_SETFL, flags | O_NONBLOCK)== -1) {
+		perror("fcntl F_SETFL");
+		exit(EXIT_FAILURE);
+	}
+	*/
+	// socket setup done 	
+	return server_fd;
+}
 
 
+int new_socket ;
+int  get_socket_message(int server_fd, char* buffer, int buffersize){
+	if(listen(server_fd, 3) <0 ) {	perror("socket listen failed ");return -1;}
+	new_socket = accept(server_fd, NULL, NULL);
+	if( new_socket == -1 ) {
+		if( errno == EWOULDBLOCK || errno == EAGAIN) {
+		// no client connected 
+		return -3;
+		} else if ( new_socket <0) {
+			perror("socket accept failed ");
+			return -1;
+		}
+	}
+	
+	ssize_t  valread = read( new_socket, buffer, buffersize); 
+	if ( valread == 0 ) {
+		printf("Socket closed by client \n");
+		close(new_socket);
+		return -1;
+	} else if ( valread >= buffersize ) {
+		//message too long					
+		valread = buffersize -1;
+	}
+	buffer[valread] = '\0'; 
+	return (int)valread;
+	//printf("Socket msg received: %s\n",buffer ); 
+}
 
-
+int interprete_socket_message(int serial_fd , int server_fd, char* buffer, int buffersize){
+	int valread= get_socket_message(server_fd, buffer, buffersize);
+	if ( valread <=0) { 
+		//printf( " get %d back from socketreturn", valread);
+		return valread; 
+	}// no message or error
+	printf( " there is a message\n");
+	if ( strncmp(buffer,"HVon",4) ==0) {
+		get_info(serial_fd,":SET:IO:CH 1 1", buffer, buffersize	);
+		usleep(5* 10000); 
+	} else if ( strncmp(buffer,"HVoff",5) ==0) {
+		get_info(serial_fd,":SET:IO:CH 1 0", buffer, buffersize	);	
+		usleep(5* 10000); 
+		//buffer=strcpy(buffer,"OK\r\n");
+	}else { cout << "Unknown socket command : " << buffer << endl;
+	  buffer=strcpy(buffer,"NotOK\r\n");	
+	}
+	
+	send(new_socket , buffer , strlen(buffer) , 0 );
+	close(new_socket);
+	cout << "Socket command processed : " << buffer << endl;
+	return valread;
+}
 
 //============================================================================
 
@@ -123,10 +249,12 @@ int main(int argc, char const *argv[]){
     
     
     po::variables_map v_map = process_program_options(argc, argv);
-    std::string        portname  = v_map["serialport"].as<string>();
-    std::string        logfile  = v_map["logfile"].as<string>();
+
+    std::string  portname  = v_map["serialport"].as<string>();
+    std::string  logfile  = v_map["logfile"].as<string>();
     int waittime =  v_map["waittime"].as<int>();
-    if (waittime < 5 )  waittime=10;
+    bool consoleoutput =  v_map["console"].as<bool>();
+    if (waittime < 2 )  waittime=2;
 	printf("%s ver %s\n\r",argv[0], SCPICLIENTSERBI );
 	printf("log output file is %s , wait time is %d s \n\r" ,logfile.c_str(),waittime);
     //serial port 
@@ -135,11 +263,16 @@ int main(int argc, char const *argv[]){
 		printf(" error in opening serial  port");
 		exit(-1);
 	}
-	
-    std::ofstream outfile; 
+
+	// setup the socket  simple socket for 1 client
+    int server_fd; 
+
+    // setup socket file descriptor  if fails program exits
+    server_fd=setup_socket(waittime);
+    std::ofstream outfile;
     outfile.open(logfile, std::ios_base::app);
 	if ( outfile.fail()) {
-		printf(" can not open %s ",logfile.c_str());
+		printf("opening  outputfile %s failed \n\r" ,logfile.c_str() );
 		exit(-3);
 	}
 
@@ -150,24 +283,28 @@ int main(int argc, char const *argv[]){
 	} else {
 		printf("break sent \n");
 	}
-	
  sleep(5);
 */
-	
 // flush port 
 	if ( tcflush(fd, TCIOFLUSH)) {
 		printf( " flush fails %s \n", strerror(errno)); 
 	} else {
 		printf("flush done  \n");
 	}
-
 	int lc=0;
-
+			//strcpy(line_buffer[lc++],":SET:IO:CH 0 1");
+			//strcpy(line_buffer[lc++],":SET:IO:CH 1 1");
+			strcpy(line_buffer[lc++],":MEAS:VOLT?:CH 2");
 			strcpy(line_buffer[lc++],":MEAS:TEMP0?");
 			strcpy(line_buffer[lc++],":MEAS:TEMP1?");
-			strcpy(line_buffer[lc++],":MEAS:TEMP2?");
+			strcpy(line_buffer[lc++],":MEAS:TEMP3?");
 			strcpy(line_buffer[lc++],":MEASURE:HUMI?");
+			strcpy(line_buffer[lc++],":MEASURE:HUMI?:CH 1");
+			strcpy(line_buffer[lc++],":MEASURE:DP?:CH 1");
 			strcpy(line_buffer[lc++],":MEASURE:LUMINOSITY?");
+			strcpy(line_buffer[lc++],":GET:STATUS?");
+			
+
 	 int nrmsg=lc;
 	 if (nrmsg > NrCmd) {
 		 printf("more messages defined than fits in array \n\r");
@@ -175,45 +312,59 @@ int main(int argc, char const *argv[]){
 	 }
 	 int ttcnt=1;
 	 printf("init messages done \n\r");
+	 get_info (fd, "*IDN?" , buffer,sizeof(buffer) ) ;	 
+	 printf(" this is %s \n\r", buffer);
+	 get_info (fd, "*HWVer?" , buffer,sizeof(buffer) ) ;	 
+	 printf(" this is HWVer %s \n\r", buffer);
+	 get_info (fd, "*HWFlavor?" , buffer,sizeof(buffer) ) ;	 
+	 printf(" this is HWFlavor  %s \n\r", buffer);
+	 if ( strcmp( buffer ,HWFLAVOR )) {
+		 printf( "wrong HWFlavor %s expecting %s exiting",buffer , HWFLAVOR) ;
+		 exit(-1);
+	 }
+	 get_info (fd, ":GET:STATUS?" , buffer,sizeof(buffer) ) ;	 
+	 printf("status  %s \n\r", buffer);
+	 get_info (fd, ":SET:IO:CH 1 0" , buffer,sizeof(buffer) ) ;	 
+	 printf(" io is %s \n\r", buffer);
+	 int toggle=0;
 	 while (ttcnt ) { // < 50000) {
-		std::stringstream ss;
-		 
+		std::stringstream ss;		 
 		lc=0;
 		time_t now = time(0); tm *ltm = localtime(&now);
 		ss << std::setfill('0') << std::setw(4) << 1900+ltm->tm_year;
 		ss <<std::setw(2) <<1+ltm->tm_mon<<std::setw(2) <<ltm->tm_mday<<"  "<<std::setw(2) <<ltm->tm_hour<<":"<<std::setw(2) <<ltm->tm_min<<" ";
+		//std::cout << ss.str()<<std::flush;
 		while(lc< nrmsg) {
-				tcflush(fd, TCIOFLUSH);
-				strcpy(buffer,line_buffer[lc] );
-				valread=(int)strlen(buffer);
-				buffer[valread++]='\r';
-				buffer[valread++]='\n';
-				buffer[valread]='\0';
-				int nrwr=write(fd,buffer,valread);	
-				buffer[valread-2]='\0';//suppress the newline in the output 
-				//printf("msg nr %03d/%04d len %02d=%02d %-20s ",lc,ttcnt,valread,nrwr,buffer);
-				//printf("%-20s ",buffer);
-				valread=read(fd, buffer , sizeof(buffer));//get full return message 
-				if( valread == 0) {
-					strcpy(buffer,"resp message is zerro");
-				} else { 		
-					buffer[valread-1]='\0';	// messages is not terminated with \0 !!! overwrite newline
+		/*		if (lc ==0) {
+					if ( toggle ==0) {
+						get_info (fd, ":SET:IO:CH 0 1" , buffer,sizeof(buffer) ) ;	 
+						toggle=1;
+					} else {
+						get_info (fd, ":SET:IO:CH 0 0" , buffer,sizeof(buffer) ) ;	 
+						toggle=0;
+					}
 				}
-				buffer[(int)strlen(buffer)-1]='\0';  //supress the  \r 
+				else {	*/
+				usleep(5* 10000); // fix value , see what is optimal 
+				valread=get_info (fd, line_buffer[lc] , buffer,sizeof(buffer) ) ;
 				//printf(" resp nr %d %-*s len %03d %03d \r\n",ttcnt++,18,buffer,valread, (int)strlen(buffer));
 				ss << buffer <<" " ;
-				
+				//std::cout << ss.str()<<std::flush;
 				//printf("%-*s  ",12,buffer);				
 				buffer[0]='\0';
-				//usleep(waittime * 10000);
-				usleep(1000000);
+
+				//usleep(1000000);
                 lc++;
 			}
 			ss <<endl;
 			outfile <<ss.str();
 			outfile.flush();
-			cout << ss.str();
-			sleep(waittime);
+			if (consoleoutput ) {		std::cout << ss.str();}
+			// timeout after waittime seconds on socket
+			interprete_socket_message(fd, server_fd, buffer, sizeof(buffer));
+			
+			//int  slept=sleep(waittime);
+			//cout << "waittime of "<<waittime <<" slept " << slept <<"  ends" << endl;
     }
   close (fd) ;
   return 0;

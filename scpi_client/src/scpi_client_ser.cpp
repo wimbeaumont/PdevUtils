@@ -9,10 +9,12 @@
  *  Version history :
  *  0.1   copied from scpiclient 
  *  1.2   added close ,  corrected message  '/0' pos
- 
+ *  1.3   adapted for WD version , but no essential changes 
+ *  1.5   added option for serial port 
+ *  1.6   merge head with elpc2 not fully tested 
  */ 
 
-#define SCPICLIENSERVER "1.4"
+#define SCPICLIENSERVER "1.6"
 
 
 #include <cstdio>
@@ -61,6 +63,7 @@ int fd=open(portname,O_RDWR | O_NOCTTY); //fd is locally defined but the open is
 //============================================================================
 
 int main(int argc, char const *argv[]){
+	char  prtnr='0';
 	int valread; 
     char buffer[256];
     const int NrCmd=20;
@@ -118,9 +121,13 @@ int main(int argc, char const *argv[]){
 				} else { 		
 					buffer[valread-1]='\0';	// messages is not terminated with \0 !!! overwrite newline
 				}
-				printf(" resp %-*s len %02d \r\n",18,buffer, (int)strlen(buffer));				
+				buffer[(int)strlen(buffer)-1]='\0';  //supress the  \r 
+				//printf(" resp nr %d %-*s len %03d %03d \r\n",ttcnt++,18,buffer,valread, (int)strlen(buffer));				
+				printf(" resp nr %d %-*s",ttcnt++,18,buffer);
+				//printf(" len %03d %03d",valread, (int)strlen(buffer));
+				printf("\n\r");
 				buffer[0]='\0';
-				usleep(10000);
+				usleep(5000);
                 lc++;
 			}
 

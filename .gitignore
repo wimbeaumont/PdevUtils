@@ -1,5 +1,7 @@
 #ignore all in this directory 
 .*
+*.code-workspace 
+scpi_client/src/scpi_client_serBI
 #but not the cmake file and .gitignore itself
 !.gitignore
 !.git
