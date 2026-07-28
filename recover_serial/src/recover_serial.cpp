@@ -132,7 +132,7 @@ int main(int argc, char const *argv[]){
 			//	printf("valread is 1 print %d\n",(int) buffer[0]);
 			//	continue;
 			//}
-			int lastchar=(int)buffer[valread-1];
+			//int lastchar=(int)buffer[valread-1];
 			buffer[valread-1]='\0'; // got some extra char and strip new line
 			//printf("valread at line %d : %d , strlength %d last char %d \n",__LINE__, valread,(int) strlen(buffer),lastchar);	
 			printf ("got : %s \n",buffer);

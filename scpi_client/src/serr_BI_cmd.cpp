@@ -95,11 +95,12 @@ int main(int argc, char const *argv[]){
              return -1;
          }
     valread=send ( sock , line_buffer, strlen(line_buffer) , 0 );
-    printf("sent msg nr %d %s length %d sould be %d \n\r",lc,line_buffer,(int)strlen(line_buffer) ,valread);
+    //printf("sent msg nr %d %s length %d sould be %d \n\r",lc,line_buffer,(int)strlen(line_buffer) ,valread);
     buffer[0]='\0';
     valread = read( sock , buffer, sizeof(buffer));
     buffer[valread]='\0';
-    printf("got (length %d,%d):%s\n",(int) strlen(buffer),valread,buffer );
+    //printf("got (length %d,%d):%s\n",(int) strlen(buffer),valread,buffer );
+    printf("%s\n",buffer );
     close(sock);
     
           lc++;

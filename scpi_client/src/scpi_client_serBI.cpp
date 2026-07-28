@@ -17,11 +17,13 @@
  *  1.6  moved wait time from between measurements to between all measurements
  *  1.7  optimized for pico
  *  1.8  added socket 
- * 
+ *  1.9  option to have output to the console during running 
+ *  2.0  moved sleep between the messages , added sleep for commands from the socket 
+ *  2.1  comment out unused variables 
  
  */ 
 
-#define SCPICLIENTSERBI "1.6"
+#define SCPICLIENTSERBI "2.1"
 
 
 #include <cstdio>
@@ -43,7 +45,7 @@
 // Namespaces
 using namespace std;
 namespace po = boost::program_options;
-
+#define HWFLAVOR "BiBox"
 #define PORT 9090 //port for socket communication
 
 int serialportsetup(string portname) {
@@ -72,7 +74,7 @@ int fd=open(portname.c_str(),O_RDWR | O_NOCTTY); //fd is locally defined but the
 		tcsetattr(fd,TCSANOW,&SerialPortSettings); // write the settings to the hardware without waiting ( TCSANOW)
 		//SerialPortSettings.c_cc[VMIN]  = 0; // Read 10 characters   we wait for the newline 
 		SerialPortSettings.c_cc[VTIME] = 0;  // Wait indefinitely for the moment   
-		
+		//printf("\n  %s  port settings  Successfully\n",portname.c_str());
 		
 	}
     return fd ;
@@ -87,9 +89,10 @@ int fd=open(portname.c_str(),O_RDWR | O_NOCTTY); //fd is locally defined but the
 po::variables_map process_program_options(const int argc, const char* const argv[]){
     po::options_description desc("Allowed options");
     desc.add_options()("help,h", "produce this help message")
-                      ("serialport,s",po::value<string>()->default_value("/dev/ttyACM0"),"set serial port to connect to")
-                      ("outputfile,o",po::value<string>()->default_value("/tmp/pico.log"), "file for storing the results")
-                      ("waittime,w", po::value<int>()->default_value((int)110), "time to wait between two measurements [s]");
+                      ("serialport,s",po::value<string>()->default_value("/dev/ttyACM1"),"set serial port to connect to")
+                      ("logfile,l",po::value<string>()->default_value("/data/logs/mbed.log"),"output file")
+                      ("waittime,w", po::value<int>()->default_value(120), "time to wait between two measurements [s]")
+					  ("console,c", po::value<bool>()->default_value(false), "if true result is also send to the console ");
 
     po::variables_map vm;
     try {
@@ -115,7 +118,8 @@ int get_info (int fd, const char* request , char* buffer, int buffersize ) {
 	strcpy(buffer,request );
 	valread=(int)strlen(buffer);
 	buffer[valread++]='\r';buffer[valread++]='\n';buffer[valread]='\0';//endl added 
-	int nrwr=write(fd,buffer,valread);	
+	//int nrwr=
+	write(fd,buffer,valread);	
 	//buffer[valread-2]='\0';//suppress the newline in the output 
 	//printf("msg nr %03d/%04d len %02d=%02d %-20s ",lc,ttcnt,valread,nrwr,buffer);
 	//printf("%-20s ",buffer);
@@ -126,6 +130,7 @@ int get_info (int fd, const char* request , char* buffer, int buffersize ) {
 	} else { 		
 		buffer[valread]='\0';	// messages is not terminated with \0 !!! overwrite newline 
 		//20251025  now seems to be valread instead of valread -1 
+		
 	}
 	buffer[(int)strlen(buffer)-1]='\0';  //supress the  \r 
 	//printf("Buf: %-*s  ",12,buffer);				
@@ -141,7 +146,7 @@ int setup_socket(int timeoutset=1){
         exit(EXIT_FAILURE); 
     } 
     struct sockaddr_in address; 
-    int addrlen = sizeof(address); 
+    //int addrlen = sizeof(address); 
     int opt = 1;
 	struct timeval timeout;
 	timeout.tv_sec = timeoutset; 
@@ -219,10 +224,12 @@ int interprete_socket_message(int serial_fd , int server_fd, char* buffer, int b
 	}// no message or error
 	printf( " there is a message\n");
 	if ( strncmp(buffer,"HVon",4) ==0) {
-		get_info(serial_fd,":SET:IO:CH 0 1", buffer, buffersize	);
+		get_info(serial_fd,":SET:IO:CH 1 1", buffer, buffersize	);
+		usleep(5* 10000); 
 	} else if ( strncmp(buffer,"HVoff",5) ==0) {
-		get_info(serial_fd,":SET:IO:CH 0 0", buffer, buffersize	);	
-		buffer=strcpy(buffer,"OK\r\n");
+		get_info(serial_fd,":SET:IO:CH 1 0", buffer, buffersize	);	
+		usleep(5* 10000); 
+		//buffer=strcpy(buffer,"OK\r\n");
 	}else { cout << "Unknown socket command : " << buffer << endl;
 	  buffer=strcpy(buffer,"NotOK\r\n");	
 	}
@@ -236,32 +243,37 @@ int interprete_socket_message(int serial_fd , int server_fd, char* buffer, int b
 //============================================================================
 
 int main(int argc, char const *argv[]){
-	int valread; 
+	//int valread; 
     char buffer[256];
     const int NrCmd=20;
     char line_buffer[NrCmd][256];
     
     
     po::variables_map v_map = process_program_options(argc, argv);
+
     std::string  portname  = v_map["serialport"].as<string>();
-    std::string  outputfilename  = v_map["outputfile"].as<string>();
-    int waittime=  v_map["waittime"].as<int>();
+    std::string  logfile  = v_map["logfile"].as<string>();
+    int waittime =  v_map["waittime"].as<int>();
+    bool consoleoutput =  v_map["console"].as<bool>();
     if (waittime < 2 )  waittime=2;
-	printf("%s ver %s  wait time %d \n\r",argv[0], SCPICLIENTSERBI, waittime );
+	printf("%s ver %s\n\r",argv[0], SCPICLIENTSERBI );
+	printf("log output file is %s , wait time is %d s \n\r" ,logfile.c_str(),waittime);
     //serial port 
 	int fd  = serialportsetup(portname);
-	if ( fd == -1 ) exit(-1);
-	
+	if ( fd == -1 ) {
+		printf(" error in opening serial  port");
+		exit(-1);
+	}
+
 	// setup the socket  simple socket for 1 client
     int server_fd; 
 
     // setup socket file descriptor  if fails program exits
     server_fd=setup_socket(waittime);
     std::ofstream outfile;
-     
-    outfile.open(outputfilename, std::ios_base::app);
+    outfile.open(logfile, std::ios_base::app);
 	if ( outfile.fail()) {
-		printf("opening  outputfile %s failed \n\r" , outputfilename.c_str());
+		printf("opening  outputfile %s failed \n\r" ,logfile.c_str() );
 		exit(-3);
 	}
 
@@ -285,6 +297,7 @@ int main(int argc, char const *argv[]){
 			//strcpy(line_buffer[lc++],":SET:IO:CH 1 1");
 			//strcpy(line_buffer[lc++],":SET:IO:CH 2 1");
 			strcpy(line_buffer[lc++],":MEAS:VOLT?:CH 0");
+			strcpy(line_buffer[lc++],":MEAS:VOLT?:CH 2");
 			strcpy(line_buffer[lc++],":MEAS:TEMP0?");
 			strcpy(line_buffer[lc++],":MEAS:TEMP1?");
 			strcpy(line_buffer[lc++],":MEAS:TEMP2?");
@@ -307,11 +320,16 @@ int main(int argc, char const *argv[]){
 	 printf(" this is %s \n\r", buffer);
 	 get_info (fd, "*HWVer?" , buffer,sizeof(buffer) ) ;	 
 	 printf(" this is HWVer %s \n\r", buffer);
+	 get_info (fd, "*HWFlavor?" , buffer,sizeof(buffer) ) ;	 
+	 printf(" this is HWFlavor  %s \n\r", buffer);
+	 if ( strcmp( buffer ,HWFLAVOR )) {
+		 printf( "wrong HWFlavor %s expecting %s exiting",buffer , HWFLAVOR) ;
+		 exit(-1);
+	 }
 	 get_info (fd, ":GET:STATUS?" , buffer,sizeof(buffer) ) ;	 
 	 printf("status  %s \n\r", buffer);
 	 get_info (fd, ":SET:IO:CH 1 0" , buffer,sizeof(buffer) ) ;	 
 	 printf(" io is %s \n\r", buffer);
-	 int toggle=0;
 	 while (ttcnt ) { // < 50000) {
 		std::stringstream ss;		 
 		lc=0;
@@ -330,20 +348,22 @@ int main(int argc, char const *argv[]){
 					}
 				}
 				else {	*/
-				valread=get_info (fd, line_buffer[lc] , buffer,sizeof(buffer) ) ;
+				usleep(5* 10000); // fix value , see what is optimal 
+				//valread=
+				get_info (fd, line_buffer[lc] , buffer,sizeof(buffer) ) ;
 				//printf(" resp nr %d %-*s len %03d %03d \r\n",ttcnt++,18,buffer,valread, (int)strlen(buffer));
 				ss << buffer <<" " ;
 				//std::cout << ss.str()<<std::flush;
 				//printf("%-*s  ",12,buffer);				
 				buffer[0]='\0';
-				usleep(5* 10000); // fix value , see what is optimal 
+
 				//usleep(1000000);
                 lc++;
 			}
 			ss <<endl;
 			outfile <<ss.str();
 			outfile.flush();
-			std::cout << ss.str();
+			if (consoleoutput ) {		std::cout << ss.str();}
 			// timeout after waittime seconds on socket
 			interprete_socket_message(fd, server_fd, buffer, sizeof(buffer));
 			
