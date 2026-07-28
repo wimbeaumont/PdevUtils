@@ -283,9 +283,11 @@ int main(int argc, char const *argv[]){
 	int lc=0;
 			//strcpy(line_buffer[lc++],":SET:IO:CH 0 1");
 			//strcpy(line_buffer[lc++],":SET:IO:CH 1 1");
+			//strcpy(line_buffer[lc++],":SET:IO:CH 2 1");
 			strcpy(line_buffer[lc++],":MEAS:VOLT?:CH 0");
 			strcpy(line_buffer[lc++],":MEAS:TEMP0?");
 			strcpy(line_buffer[lc++],":MEAS:TEMP1?");
+			strcpy(line_buffer[lc++],":MEAS:TEMP2?");
 			strcpy(line_buffer[lc++],":MEAS:TEMP3?");
 			strcpy(line_buffer[lc++],":MEASURE:HUMI?");
 			strcpy(line_buffer[lc++],":MEASURE:HUMI?:CH 1");
